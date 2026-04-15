@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Florence-2 Analyzer</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#fff;--sur:#f8f8f8;--b:#e4e4e4;
+  --tx:#111;--mu:#999;--hov:#f2f2f2;
+  --font:'IBM Plex Sans',sans-serif;--mono:'IBM Plex Mono',monospace;
+}
+html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--tx);
+  font-family:var(--font);font-size:13px}
+body{display:grid;grid-template-rows:44px 1fr 50px}
+
+header{display:flex;align-items:center;gap:10px;padding:0 14px;
+  border-bottom:1px solid var(--b);background:var(--bg)}
+.logo{font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:.08em;
+  padding-right:12px;border-right:1px solid var(--b);white-space:nowrap}
+#api-url{flex:1;height:28px;border:1px solid var(--b);font-family:var(--mono);
+  font-size:11px;padding:0 8px;outline:none;background:transparent;min-width:0}
+#api-url:focus{border-color:#aaa}
+#api-url::placeholder{color:var(--mu)}
+.dot{width:7px;height:7px;border-radius:50%;background:#ddd;flex-shrink:0;transition:background .3s}
+.dot.ok{background:#22c55e}.dot.err{background:#ef4444}
+.dot.spin{background:#f59e0b;animation:blink 1s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+
+main{display:grid;grid-template-columns:1fr 300px;overflow:hidden;min-height:0}
+
+/* canvas panel */
+.cpanel{display:flex;flex-direction:column;overflow:hidden;background:var(--sur);border-right:1px solid var(--b)}
+.carea{flex:1;display:flex;align-items:center;justify-content:center;
+  overflow:hidden;position:relative;min-height:0}
+.cwrap{position:relative;line-height:0;display:none}
+#ic{display:block}
+#oc{position:absolute;top:0;left:0;cursor:crosshair}
+#prev{display:none;position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
+.hint{position:absolute;font-family:var(--mono);font-size:11px;color:var(--mu);
+  text-align:center;line-height:2.4;pointer-events:none}
+
+/* layer bar */
+.lbar{display:none;flex-wrap:wrap;align-items:center;gap:5px;
+  padding:7px 12px;border-top:1px solid var(--b);background:var(--bg);flex-shrink:0}
+.lbar.vis{display:flex}
+.lb{display:flex;align-items:center;gap:5px;height:24px;padding:0 9px;
+  border:1px solid var(--b);background:var(--bg);cursor:pointer;
+  font-family:var(--mono);font-size:10px;letter-spacing:.04em;
+  transition:background .1s,border-color .1s;user-select:none}
+.lb .sw{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.lb.on{background:var(--tx);color:var(--bg);border-color:var(--tx)}
+.lb.on .sw{outline:1px solid rgba(255,255,255,.4)}
+.lb:hover:not(.on){background:var(--hov)}
+.lsep{width:1px;height:20px;background:var(--b);margin:0 3px}
+.opw{display:flex;align-items:center;gap:6px;margin-left:auto;
+  font-family:var(--mono);font-size:10px;color:var(--mu)}
+#osl{width:68px;accent-color:var(--tx)}
+
+/* loading overlay */
+.lov{display:none;position:absolute;inset:0;background:rgba(255,255,255,.86);
+  align-items:center;justify-content:center;flex-direction:column;gap:10px;z-index:10}
+.lov.on{display:flex}
+.sp2{width:20px;height:20px;border:2px solid var(--b);border-top-color:var(--tx);
+  border-radius:50%;animation:rot .7s linear infinite}
+@keyframes rot{to{transform:rotate(360deg)}}
+#lmsg{font-family:var(--mono);font-size:10px;color:var(--mu)}
+
+/* results panel */
+.rpanel{display:flex;flex-direction:column;overflow:hidden;min-height:0}
+.tabs{display:flex;flex-shrink:0;border-bottom:1px solid var(--b)}
+.tb{flex:1;height:34px;border:none;background:none;cursor:pointer;
+  font-family:var(--mono);font-size:9px;font-weight:500;letter-spacing:.07em;
+  text-transform:uppercase;color:var(--mu);border-bottom:2px solid transparent;
+  transition:color .12s,border-color .12s}
+.tb.on{color:var(--tx);border-bottom-color:var(--tx)}
+.tb:hover:not(.on){color:#555}
+.tc{display:none;flex:1;overflow-y:auto;min-height:0}
+.tc.on{display:block}
+
+.csec{padding:10px 13px;border-bottom:1px solid var(--b)}
+.clbl{font-family:var(--mono);font-size:9px;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--mu);margin-bottom:5px}
+.cbody{font-size:12px;line-height:1.75}
+
+.ri{display:flex;align-items:flex-start;gap:8px;padding:7px 13px;
+  border-bottom:1px solid var(--b);cursor:default;transition:background .08s}
+.ri:hover,.ri.hl{background:var(--hov)}
+.ri:last-child{border-bottom:none}
+.rsw{width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-top:3px}
+.rl{font-family:var(--mono);font-size:11px;font-weight:500;line-height:1.5;word-break:break-word}
+.rc{font-family:var(--mono);font-size:9px;color:var(--mu);margin-top:2px}
+.badge{display:inline-block;font-family:var(--mono);font-size:9px;
+  padding:1px 4px;border:1px solid var(--b);color:var(--mu);margin-left:4px}
+
+.slbl{font-family:var(--mono);font-size:9px;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--mu);padding:8px 13px 3px;
+  border-top:1px solid var(--b);margin-top:2px}
+.slbl:first-child{border-top:none;margin-top:0}
+
+.otxt{font-family:var(--mono);font-size:11px;line-height:1.85;
+  white-space:pre-wrap;padding:10px 13px;border-bottom:1px solid var(--b)}
+
+.emsg{font-family:var(--mono);font-size:11px;color:var(--mu);
+  padding:20px 13px;text-align:center}
+
+footer{display:flex;align-items:center;gap:7px;padding:0 14px;
+  border-top:1px solid var(--b);background:var(--bg)}
+footer button{height:30px;padding:0 12px;border:1px solid var(--b);
+  background:var(--bg);color:var(--tx);cursor:pointer;
+  font-family:var(--mono);font-size:10px;letter-spacing:.04em;
+  transition:background .08s;white-space:nowrap}
+footer button:hover:not(:disabled){background:var(--hov);border-color:#bbb}
+footer button:disabled{opacity:.35;cursor:default}
+footer button.pri{background:var(--tx);color:var(--bg);border-color:var(--tx)}
+footer button.pri:hover:not(:disabled){background:#333}
+footer button.pri:disabled{background:#aaa;border-color:#aaa}
+.fsep{flex:1}
+#stxt{font-family:var(--mono);font-size:10px;color:var(--mu)}
+</style>
+</head>
+<body>
+
+<header>
+  <span class="logo">FLORENCE-2</span>
+  <input id="api-url" type="text" placeholder="https://xxxx.trycloudflare.com" spellcheck="false" autocomplete="off">
+  <div class="dot" id="dot"></div>
+</header>
+
+<main>
+  <div class="cpanel">
+    <div class="carea" id="carea">
+      <video id="prev" autoplay playsinline muted></video>
+      <div class="cwrap" id="cwrap">
+        <canvas id="ic"></canvas>
+        <canvas id="oc"></canvas>
+      </div>
+      <div class="hint" id="hint">Kein Bild<br>Kamera · Upload</div>
+      <div class="lov" id="lov">
+        <div class="sp2"></div>
+        <span id="lmsg">Analysiere…</span>
+      </div>
+    </div>
+
+    <div class="lbar" id="lbar">
+      <button class="lb on" data-layer="objects"><span class="sw" style="background:#2563EB"></span>OD</button>
+      <button class="lb on" data-layer="regions"><span class="sw" style="background:#16A34A"></span>Regionen</button>
+      <button class="lb" data-layer="phrases"><span class="sw" style="background:#7C3AED"></span>Phrasen</button>
+      <button class="lb" data-layer="proposals"><span class="sw" style="background:#9CA3AF"></span>Proposals</button>
+      <button class="lb" data-layer="ocr"><span class="sw" style="background:#D97706"></span>OCR</button>
+      <div class="lsep"></div>
+      <div class="opw"><span>Opazität</span><input type="range" id="osl" min="10" max="100" value="60"></div>
+    </div>
+  </div>
+
+  <div class="rpanel">
+    <div class="tabs">
+      <button class="tb on" data-tab="cap">Caption</button>
+      <button class="tb" data-tab="obj">Objekte</button>
+      <button class="tb" data-tab="reg">Regionen</button>
+      <button class="tb" data-tab="ocr">OCR</button>
+    </div>
+    <div class="tc on" id="tab-cap"><div class="emsg">— kein Ergebnis —</div></div>
+    <div class="tc" id="tab-obj"><div class="emsg">— kein Ergebnis —</div></div>
+    <div class="tc" id="tab-reg"><div class="emsg">— kein Ergebnis —</div></div>
+    <div class="tc" id="tab-ocr"><div class="emsg">— kein Ergebnis —</div></div>
+  </div>
+</main>
+
+<footer>
+  <button id="bcam">Kamera</button>
+  <button id="bcap" style="display:none">Aufnehmen</button>
+  <button id="bcan" style="display:none">Abbrechen</button>
+  <button id="bupl">Upload</button>
+  <input id="fi" type="file" accept="image/*" style="display:none">
+  <div class="fsep"></div>
+  <span id="stxt"></span>
+  <button id="bana" class="pri" disabled>Analysieren</button>
+</footer>
+
+<script>
+// ── STATE ──────────────────────────────────
+let API='', data=null, blob=null, natW=0, natH=0, cam=null;
+let hlType=null, hlIdx=-1, overlayOpacity=0.6;
+
+const layerOn={objects:true,regions:true,phrases:false,proposals:false,ocr:false};
+const LC={objects:'#2563EB',regions:'#16A34A',phrases:'#7C3AED',proposals:'#9CA3AF',ocr:'#D97706'};
+const labelCol={};
+const PAL=['#2563EB','#DC2626','#16A34A','#D97706','#7C3AED','#0891B2',
+           '#DB2777','#65A30D','#EA580C','#0D9488','#9333EA','#B45309'];
+let pp=0;
+function lc(k){ if(!labelCol[k]) labelCol[k]=PAL[pp++%PAL.length]; return labelCol[k]; }
+
+// ── DOM ────────────────────────────────────
+const $=id=>document.getElementById(id);
+const apiIn=$('api-url'), dotEl=$('dot'), carea=$('carea'), cwrap=$('cwrap');
+const hint=$('hint'), ic=$('ic'), oc=$('oc'), prev=$('prev');
+const lov=$('lov'), lmsg=$('lmsg'), lbar=$('lbar'), stxt=$('stxt');
+const bana=$('bana'), bcam=$('bcam'), bcap=$('bcap'), bcan=$('bcan'), fi=$('fi');
+const iCtx=ic.getContext('2d'), oCtx=oc.getContext('2d');
+
+// ── API ────────────────────────────────────
+apiIn.addEventListener('input',()=>{
+  API=apiIn.value.trim().replace(/\/$/,'');
+  localStorage.setItem('f2url',API); chk();
+});
+async function chk(){
+  if(!API){dotEl.className='dot';return;}
+  dotEl.className='dot spin';
+  try{
+    const r=await fetch(`${API}/health`,{signal:AbortSignal.timeout(5000)});
+    dotEl.className=r.ok?'dot ok':'dot err';
+    setS(r.ok?'Verbunden':'Fehler');
+  }catch{dotEl.className='dot err';setS('Nicht erreichbar');}
+}
+const sv=localStorage.getItem('f2url');
+if(sv){apiIn.value=sv;API=sv;chk();}
+
+// ── CAMERA ─────────────────────────────────
+bcam.addEventListener('click',async()=>{
+  try{
+    cam=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1920}}});
+    prev.srcObject=cam; prev.style.display='block';
+    cwrap.style.display='none'; hint.style.display='none';
+    bcam.style.display='none'; bcap.style.display=''; bcan.style.display='';
+    bana.disabled=true;
+  }catch{setS('Kamerazugriff verweigert');}
+});
+bcap.addEventListener('click',()=>{
+  const vw=prev.videoWidth,vh=prev.videoHeight;
+  sizeC(vw,vh); iCtx.drawImage(prev,0,0,ic.width,ic.height);
+  natW=vw; natH=vh;
+  ic.toBlob(b=>{blob=b;},'image/jpeg',0.93);
+  stopCam(); showC(); bana.disabled=false; resetR();
+});
+bcan.addEventListener('click',stopCam);
+function stopCam(){
+  if(cam){cam.getTracks().forEach(t=>t.stop());cam=null;}
+  prev.style.display='none';
+  bcam.style.display=''; bcap.style.display='none'; bcan.style.display='none';
+  if(!blob){hint.style.display='';cwrap.style.display='none';}
+}
+
+// ── UPLOAD ─────────────────────────────────
+$('bupl').addEventListener('click',()=>fi.click());
+fi.addEventListener('change',()=>{
+  const f=fi.files[0]; if(!f) return;
+  blob=f;
+  const url=URL.createObjectURL(f);
+  const img=new Image();
+  img.onload=()=>{
+    natW=img.naturalWidth; natH=img.naturalHeight;
+    sizeC(natW,natH);
+    iCtx.drawImage(img,0,0,ic.width,ic.height);
+    URL.revokeObjectURL(url);
+    showC(); bana.disabled=false; resetR();
+  };
+  img.src=url;
+  fi.value='';
+});
+
+// ── CANVAS ─────────────────────────────────
+function sizeC(nw,nh){
+  const mw=carea.clientWidth-16, mh=carea.clientHeight-16;
+  const s=Math.min(mw/nw,mh/nh,1);
+  ic.width=oc.width=Math.round(nw*s);
+  ic.height=oc.height=Math.round(nh*s);
+}
+function showC(){
+  cwrap.style.display='block';  // explicit 'block' — not '' which reverts to CSS none
+  hint.style.display='none';
+  clearO();
+}
+
+// ── ANALYZE ────────────────────────────────
+bana.addEventListener('click',async()=>{
+  if(!blob)return;
+  if(!API){setS('Bitte URL eingeben');return;}
+  bana.disabled=true;
+  lov.classList.add('on');
+  dotEl.className='dot spin';
+  const msgs=['Caption generieren…','Objekte erkennen…','Regionen beschriften…',
+              'Phrase Grounding…','Region Proposals…','OCR…'];
+  let mi=0;
+  const t=setInterval(()=>{lmsg.textContent=msgs[mi++%msgs.length];},4500);
+  try{
+    const fd=new FormData();
+    fd.append('file',blob,'img.jpg');
+    const r=await fetch(`${API}/analyze`,{method:'POST',body:fd,signal:AbortSignal.timeout(300000)});
+    if(!r.ok) throw new Error(`HTTP ${r.status}`);
+    data=await r.json();
+    renderAll(data);
+    redraw();
+    lbar.classList.add('vis');
+    dotEl.className='dot ok';
+    const no=data.objects?.['<OD>']?.bboxes?.length??0;
+    const nr=data.regions?.['<DENSE_REGION_CAPTION>']?.bboxes?.length??0;
+    const np=data.phrases?.['<CAPTION_TO_PHRASE_GROUNDING>']?.bboxes?.length??0;
+    const nt=data.ocr_regions?.['<OCR_WITH_REGION>']?.labels?.length??0;
+    setS(`${no} Obj · ${nr} Reg · ${np} Phr · ${nt} OCR`);
+  }catch(e){
+    dotEl.className='dot err'; setS(`Fehler: ${e.message}`);
+  }finally{
+    clearInterval(t); lov.classList.remove('on'); bana.disabled=false;
+  }
+});
+
+// ── LAYER TOGGLES ──────────────────────────
+document.querySelectorAll('.lb').forEach(b=>{
+  b.addEventListener('click',()=>{
+    const l=b.dataset.layer;
+    layerOn[l]=!layerOn[l];
+    b.classList.toggle('on',layerOn[l]);
+    redraw();
+  });
+});
+$('osl').addEventListener('input',e=>{overlayOpacity=e.target.value/100;redraw();});
+
+// ── OVERLAY ────────────────────────────────
+function clearO(){oCtx.clearRect(0,0,oc.width,oc.height);}
+function redraw(){drawOverlay(hlType,hlIdx);}
+
+function drawOverlay(type,idx){
+  clearO(); if(!data) return;
+  const sx=oc.width/data.imageWidth, sy=oc.height/data.imageHeight;
+
+  if(layerOn.proposals){
+    const rp=data.proposals?.['<REGION_PROPOSAL>'];
+    if(rp?.bboxes) rp.bboxes.forEach((bb,i)=>
+      box(bb,LC.proposals,'',sx,sy,type==='proposals'&&idx===i,true,0.3));
+  }
+  if(layerOn.objects){
+    const od=data.objects?.['<OD>'];
+    if(od?.bboxes) od.bboxes.forEach((bb,i)=>
+      box(bb,lc(od.labels[i]),od.labels[i],sx,sy,type==='objects'&&idx===i,false,overlayOpacity));
+  }
+  if(layerOn.regions){
+    const dr=data.regions?.['<DENSE_REGION_CAPTION>'];
+    if(dr?.bboxes) dr.bboxes.forEach((bb,i)=>
+      box(bb,LC.regions,`R${i+1}`,sx,sy,type==='regions'&&idx===i,true,overlayOpacity));
+  }
+  if(layerOn.phrases){
+    const pg=data.phrases?.['<CAPTION_TO_PHRASE_GROUNDING>'];
+    if(pg?.bboxes) pg.bboxes.forEach((bb,i)=>
+      box(bb,LC.phrases,pg.labels[i]||`P${i+1}`,sx,sy,type==='phrases'&&idx===i,false,overlayOpacity));
+  }
+  if(layerOn.ocr){
+    const ocr=data.ocr_regions?.['<OCR_WITH_REGION>'];
+    if(ocr?.quad_boxes) ocr.quad_boxes.forEach((qb,i)=>
+      quad(qb,ocr.labels[i]||'',sx,sy,type==='ocr'&&idx===i,overlayOpacity));
+  }
+}
+
+function box(bb,col,label,sx,sy,hl,dashed,alpha){
+  const[x1,y1,x2,y2]=bb;
+  const rx=x1*sx,ry=y1*sy,rw=(x2-x1)*sx,rh=(y2-y1)*sy;
+  oCtx.save();
+  oCtx.globalAlpha=hl?Math.min(alpha+.3,1):alpha;
+  oCtx.strokeStyle=col; oCtx.lineWidth=hl?2.5:1.5;
+  oCtx.setLineDash(dashed?[5,4]:[]);
+  oCtx.strokeRect(rx,ry,rw,rh);
+  if(hl){oCtx.fillStyle=col;oCtx.globalAlpha=.07;oCtx.fillRect(rx,ry,rw,rh);}
+  if(label){
+    oCtx.setLineDash([]);
+    oCtx.globalAlpha=hl?.92:Math.min(alpha+.1,.82);
+    const fs=hl?11:10;
+    oCtx.font=`${fs}px "IBM Plex Mono",monospace`;
+    const txt=label.length>22?label.slice(0,21)+'…':label;
+    const tw=oCtx.measureText(txt).width+8, bh=hl?17:15;
+    const by=ry>=bh?ry-bh:ry+rh;
+    oCtx.fillStyle=col; oCtx.fillRect(rx,by,tw,bh);
+    oCtx.fillStyle='#fff'; oCtx.globalAlpha=1;
+    oCtx.fillText(txt,rx+4,by+bh-4);
+  }
+  oCtx.restore();
+}
+
+function quad(qb,label,sx,sy,hl,alpha){
+  oCtx.save();
+  oCtx.globalAlpha=hl?Math.min(alpha+.3,1):alpha;
+  oCtx.strokeStyle=LC.ocr; oCtx.lineWidth=hl?2:1.5;
+  oCtx.setLineDash([4,3]);
+  oCtx.beginPath();
+  oCtx.moveTo(qb[0]*sx,qb[1]*sy); oCtx.lineTo(qb[2]*sx,qb[3]*sy);
+  oCtx.lineTo(qb[4]*sx,qb[5]*sy); oCtx.lineTo(qb[6]*sx,qb[7]*sy);
+  oCtx.closePath(); oCtx.stroke();
+  if(label&&hl){
+    oCtx.setLineDash([]);
+    oCtx.font='11px "IBM Plex Mono",monospace';
+    const tw=oCtx.measureText(label).width+8;
+    oCtx.fillStyle=LC.ocr; oCtx.fillRect(qb[0]*sx,qb[1]*sy-17,tw,17);
+    oCtx.fillStyle='#fff'; oCtx.globalAlpha=1;
+    oCtx.fillText(label,qb[0]*sx+4,qb[1]*sy-4);
+  }
+  oCtx.restore();
+}
+
+// ── CANVAS CLICK ───────────────────────────
+oc.addEventListener('click',e=>{
+  if(!data) return;
+  const r=oc.getBoundingClientRect();
+  const cx=(e.clientX-r.left)*(oc.width/r.width);
+  const cy=(e.clientY-r.top)*(oc.height/r.height);
+  const sx=oc.width/data.imageWidth, sy=oc.height/data.imageHeight;
+  const od=data.objects?.['<OD>'];
+  if(od?.bboxes&&layerOn.objects){
+    for(let i=od.bboxes.length-1;i>=0;i--){
+      const[x1,y1,x2,y2]=od.bboxes[i];
+      if(cx>=x1*sx&&cx<=x2*sx&&cy>=y1*sy&&cy<=y2*sy){
+        activateTab('obj'); hlItem('objects',i); scrollRI('objects',i); return;
+      }
+    }
+  }
+  const dr=data.regions?.['<DENSE_REGION_CAPTION>'];
+  if(dr?.bboxes&&layerOn.regions){
+    for(let i=dr.bboxes.length-1;i>=0;i--){
+      const[x1,y1,x2,y2]=dr.bboxes[i];
+      if(cx>=x1*sx&&cx<=x2*sx&&cy>=y1*sy&&cy<=y2*sy){
+        activateTab('reg'); hlItem('regions',i); scrollRI('regions',i); return;
+      }
+    }
+  }
+});
+
+// ── RENDER ─────────────────────────────────
+function renderAll(d){renderCap(d);renderObj(d);renderReg(d);renderOCR(d);}
+
+function renderCap(d){
+  const c1=d.caption?.['<DETAILED_CAPTION>']||'';
+  const c2=d.caption2?.['<MORE_DETAILED_CAPTION>']||'';
+  $('tab-cap').innerHTML=`
+    <div class="csec"><div class="clbl">Kurz</div><div class="cbody">${esc(c1)||nd()}</div></div>
+    <div class="csec"><div class="clbl">Detailliert</div><div class="cbody">${esc(c2)||nd()}</div></div>`;
+}
+
+function renderObj(d){
+  const od=d.objects?.['<OD>'];
+  const pg=d.phrases?.['<CAPTION_TO_PHRASE_GROUNDING>'];
+  let h='';
+  if(od?.bboxes?.length){
+    h+=`<div class="slbl">Objekte (${od.bboxes.length})</div>`;
+    h+=od.bboxes.map((bb,i)=>{
+      const l=od.labels[i],[x1,y1,x2,y2]=bb.map(Math.round);
+      const pct=Math.round((x2-x1)*(y2-y1)/d.imageWidth/d.imageHeight*100);
+      return `<div class="ri" data-t="objects" data-i="${i}"
+        onmouseenter="hlItem('objects',${i})" onmouseleave="hlClear()">
+        <div class="rsw" style="background:${lc(l)}"></div>
+        <div><div class="rl">${esc(l)}</div>
+          <div class="rc">${x1},${y1} → ${x2},${y2}<span class="badge">${pct}%</span></div>
+        </div></div>`;
+    }).join('');
+  }
+  if(pg?.bboxes?.length){
+    h+=`<div class="slbl">Phrase Grounding (${pg.bboxes.length})</div>`;
+    h+=pg.bboxes.map((bb,i)=>{
+      const l=pg.labels[i]||`P${i+1}`,[x1,y1,x2,y2]=bb.map(Math.round);
+      return `<div class="ri" data-t="phrases" data-i="${i}"
+        onmouseenter="hlItem('phrases',${i})" onmouseleave="hlClear()">
+        <div class="rsw" style="background:${LC.phrases}"></div>
+        <div><div class="rl">${esc(l)}</div>
+          <div class="rc">${x1},${y1} → ${x2},${y2}</div>
+        </div></div>`;
+    }).join('');
+  }
+  $('tab-obj').innerHTML=h||`<div class="emsg">Keine Objekte</div>`;
+}
+
+function renderReg(d){
+  const dr=d.regions?.['<DENSE_REGION_CAPTION>'];
+  const rp=d.proposals?.['<REGION_PROPOSAL>'];
+  let h='';
+  if(dr?.bboxes?.length){
+    h+=`<div class="slbl">Dichte Regionen (${dr.bboxes.length})</div>`;
+    h+=dr.bboxes.map((bb,i)=>{
+      const l=dr.labels[i],[x1,y1,x2,y2]=bb.map(Math.round);
+      return `<div class="ri" data-t="regions" data-i="${i}"
+        onmouseenter="hlItem('regions',${i})" onmouseleave="hlClear()">
+        <div class="rsw" style="background:${LC.regions}"></div>
+        <div><div class="rl">${esc(l)}</div>
+          <div class="rc">${x1},${y1} → ${x2},${y2}</div>
+        </div></div>`;
+    }).join('');
+  }
+  if(rp?.bboxes?.length){
+    h+=`<div class="slbl">Region Proposals (${rp.bboxes.length})</div>`;
+    h+=rp.bboxes.map((bb,i)=>{
+      const[x1,y1,x2,y2]=bb.map(Math.round);
+      const pct=Math.round((x2-x1)*(y2-y1)/d.imageWidth/d.imageHeight*100);
+      return `<div class="ri" data-t="proposals" data-i="${i}"
+        onmouseenter="hlItem('proposals',${i})" onmouseleave="hlClear()">
+        <div class="rsw" style="background:${LC.proposals}"></div>
+        <div><div class="rl" style="color:var(--mu)">Proposal ${i+1}</div>
+          <div class="rc">${x1},${y1} → ${x2},${y2}<span class="badge">${pct}%</span></div>
+        </div></div>`;
+    }).join('');
+  }
+  $('tab-reg').innerHTML=h||`<div class="emsg">Keine Regionen</div>`;
+}
+
+function renderOCR(d){
+  const txt=d.ocr?.['<OCR>']||'';
+  const reg=d.ocr_regions?.['<OCR_WITH_REGION>'];
+  let h='';
+  if(txt) h+=`<div class="slbl">Volltext</div><div class="otxt">${esc(txt)}</div>`;
+  if(reg?.labels?.length){
+    h+=`<div class="slbl">Textstellen (${reg.labels.length})</div>`;
+    h+=reg.labels.map((l,i)=>`
+      <div class="ri" onmouseenter="hlOCR(${i})" onmouseleave="hlClear()">
+        <div class="rsw" style="background:${LC.ocr}"></div>
+        <div class="rl">${esc(l)}</div>
+      </div>`).join('');
+  }
+  $('tab-ocr').innerHTML=h||`<div class="emsg">Kein Text erkannt</div>`;
+}
+
+// ── HIGHLIGHT ──────────────────────────────
+function hlItem(type,idx){
+  hlType=type; hlIdx=idx;
+  if(!layerOn[type]){
+    layerOn[type]=true;
+    document.querySelector(`[data-layer="${type}"]`)?.classList.add('on');
+  }
+  redraw();
+  document.querySelectorAll('.ri.hl').forEach(e=>e.classList.remove('hl'));
+  document.querySelector(`[data-t="${type}"][data-i="${idx}"]`)?.classList.add('hl');
+}
+function hlOCR(i){hlType='ocr';hlIdx=i;redraw();}
+function hlClear(){hlType=null;hlIdx=-1;redraw();
+  document.querySelectorAll('.ri.hl').forEach(e=>e.classList.remove('hl'));}
+function scrollRI(type,idx){
+  document.querySelector(`[data-t="${type}"][data-i="${idx}"]`)
+    ?.scrollIntoView({block:'nearest',behavior:'smooth'});
+}
+
+// ── TABS ───────────────────────────────────
+document.querySelectorAll('.tb').forEach(b=>
+  b.addEventListener('click',()=>activateTab(b.dataset.tab)));
+function activateTab(n){
+  document.querySelectorAll('.tb').forEach(b=>b.classList.toggle('on',b.dataset.tab===n));
+  document.querySelectorAll('.tc').forEach(c=>c.classList.toggle('on',c.id===`tab-${n}`));
+}
+
+// ── UTILS ──────────────────────────────────
+function setS(m){stxt.textContent=m;}
+function nd(){return '<span style="color:var(--mu)">—</span>';}
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function resetR(){
+  data=null; clearO(); lbar.classList.remove('vis');
+  ['cap','obj','reg','ocr'].forEach(t=>
+    $(`tab-${t}`).innerHTML='<div class="emsg">— kein Ergebnis —</div>');
+  setS('');
+}
+
+let rto;
+window.addEventListener('resize',()=>{
+  clearTimeout(rto);
+  rto=setTimeout(()=>{
+    if(!natW||!blob) return;
+    const url=URL.createObjectURL(blob);
+    const img=new Image();
+    img.onload=()=>{
+      sizeC(natW,natH);
+      iCtx.drawImage(img,0,0,ic.width,ic.height);
+      URL.revokeObjectURL(url);
+      redraw();
+    };
+    img.src=url;
+  },200);
+});
+</script>
+</body>
+</html>
